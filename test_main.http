@@ -1,0 +1,19 @@
+# Test your FastAPI endpoints
+
+### Root
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+###
+
+### Hello
+GET http://127.0.0.1:8000/hello/User
+Accept: application/json
+
+###
+
+### Health
+GET http://127.0.0.1:8000/healthz
+Accept: application/json
+
+###
