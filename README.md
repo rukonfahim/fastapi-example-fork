@@ -28,7 +28,6 @@ app/
   models/
     schemas.py
   main.py
-main.py                # re-exports app from app.main for uvicorn
 pyproject.toml         # deps, tools, scripts
 README.md
 tests/
@@ -87,7 +86,7 @@ Notes:
 - `GET /healthz` → `{ "message": "ok:{version}:{environment}" }`
 
 ## Development notes
-- The app object is defined in `app/main.py` and re-exported in the root `main.py` for backward compatibility. You can run: `uvicorn app.main:app --reload` or `uvicorn main:app --reload`.
+- The app object is defined in `app/main.py`. Run the server with: `uvicorn app.main:app --reload`.
 - Logging is configured during app startup in the FastAPI `lifespan` hook.
 - Keep `APP_CORS_ORIGINS` restricted in non-development environments.
 
