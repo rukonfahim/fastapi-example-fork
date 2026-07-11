@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 import pytest
 from app.main import app
@@ -29,3 +30,10 @@ async def test_healthz():
     data = resp.json()
     assert "message" in data
     assert re.match(r"^ok:.*:(development|staging|production)$", data["message"]) is not None
+
+
+def test_nginx_proxy_target_matches_uvicorn_port():
+    nginx_conf = Path(__file__).resolve().parents[1] / "nginx.conf"
+    content = nginx_conf.read_text(encoding="utf-8")
+
+    assert "proxy_pass http://127.0.0.1:8000;" in content
