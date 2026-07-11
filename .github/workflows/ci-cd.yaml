@@ -20,18 +20,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-numeric-version: '3.11'
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Dependencies
         run: |
-          pip install --upgrade pip
-          pip install -r app/requirements.txt pytest httpx
+          python -m pip install --upgrade pip
+          python -m pip install "fastapi>=0.120.0" "uvicorn>=0.38.0" "pydantic-settings>=2.1.0" pytest pytest-asyncio httpx
 
       - name: Run Tests
-        run: |
-          # Simple pytest validation on the FastAPI health endpoint
-          pytest -v app/
+        run: pytest -q tests
+
+      - name: Build Docker image
+        run: docker build -f Dockerfile -t fastapi-example:test .
 
   build-and-push:
     needs: lint-and-test
@@ -66,7 +67,8 @@ jobs:
       - name: Build and Push FastAPI Image
         uses: docker/build-push-action@v5
         with:
-          context: ./app
+          context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
