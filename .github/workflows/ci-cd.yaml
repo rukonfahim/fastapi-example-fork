@@ -8,6 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
