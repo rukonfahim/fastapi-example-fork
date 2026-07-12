@@ -26,6 +26,7 @@ htmlcov/
 .idea/
 .vscode/
 
-# terraform binary
-./infra/terraform/environments/ec2/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/linux_amd64/terraform-provider-aws_v5.100.0_x5
+# terraform local cache and provider binaries
+infra/terraform/environments/ec2/.terraform/
+infra/terraform/environments/ec2/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/linux_amd64/terraform-provider-aws_v5.100.0_x5
 
