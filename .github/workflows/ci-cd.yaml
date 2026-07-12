@@ -63,6 +63,8 @@ jobs:
           tags: |
             type=sha,format=short
             type=ref,event=branch
+            type=raw,value=latest
+            #type=raw,value=stage
 
       - name: Build and Push FastAPI Image
         uses: docker/build-push-action@v5
