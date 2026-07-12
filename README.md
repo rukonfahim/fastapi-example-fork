@@ -13,6 +13,7 @@ This repository contains a minimal FastAPI application organized with a small, s
 - Lint/format configuration using Ruff
 - HTTP scratch file (`test_main.http`) for manual testing
 
+
 ## Project layout
 ```
 app/
