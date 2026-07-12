@@ -1,1 +1,1 @@
-docker run -p 8080:8443 ghcr.io/rukonfahim/fastapi-example-fork:latest
+docker run -p 8080:8443 --env-file infra/local/.env.example ghcr.io/rukonfahim/fastapi-example-fork:latest
