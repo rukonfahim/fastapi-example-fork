@@ -25,13 +25,13 @@ module "networking" {
 }
 
 module "security" {
-  source               = "../../modules/security"
-  name                 = var.name
-  vpc_id               = module.networking.vpc_id
-  allowed_http_cidrs   = var.allowed_http_cidrs
-  allowed_https_cidrs  = var.allowed_https_cidrs
-  admin_cidr_blocks    = var.admin_cidr_blocks
-  tags                 = var.tags
+  source              = "../../modules/security"
+  name                = var.name
+  vpc_id              = module.networking.vpc_id
+  allowed_http_cidrs  = var.allowed_http_cidrs
+  allowed_https_cidrs = var.allowed_https_cidrs
+  admin_cidr_blocks   = var.admin_cidr_blocks
+  tags                = var.tags
 }
 
 module "iam" {
@@ -44,24 +44,6 @@ resource "aws_cloudwatch_log_group" "app" {
   retention_in_days = 30
 
   tags = var.tags
-}
-
-resource "aws_instance" "app" {
-  ami                    = var.ami_id
-  instance_type          = var.instance_type
-  subnet_id              = module.networking.public_subnet_ids[0]
-  vpc_security_group_ids = [module.security.app_sg_id]
-  iam_instance_profile   = module.iam.ec2_instance_profile_name
-  key_name               = var.key_name
-
-  user_data = templatefile("${path.module}/user_data.tpl", {
-    app_env         = var.app_env
-    container_image = var.container_image
-    region          = var.region
-    log_group_name  = aws_cloudwatch_log_group.app.name
-  })
-
-  tags = merge(var.tags, { Name = "${var.name}-app" })
 }
 
 resource "aws_lb" "app" {
@@ -88,12 +70,6 @@ resource "aws_lb_target_group" "app" {
   }
 }
 
-resource "aws_lb_target_group_attachment" "app" {
-  target_group_arn = aws_lb_target_group.app.arn
-  target_id        = aws_instance.app.id
-  port             = 80
-}
-
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app.arn
   port              = 80
@@ -102,5 +78,68 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+resource "aws_launch_template" "app" {
+  name_prefix   = "${var.name}-app-"
+  image_id      = var.ami_id
+  instance_type = var.instance_type
+  key_name      = var.key_name
+
+  iam_instance_profile {
+    name = module.iam.ec2_instance_profile_name
+  }
+
+  vpc_security_group_ids = [module.security.app_sg_id]
+
+  user_data = base64encode(templatefile("${path.module}/user_data.tpl", {
+    app_env         = var.app_env
+    container_image = var.container_image
+    region          = var.region
+    log_group_name  = aws_cloudwatch_log_group.app.name
+  }))
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(var.tags, { Name = "${var.name}-app" })
+  }
+}
+
+resource "aws_autoscaling_group" "app" {
+  name                      = "${var.name}-asg"
+  desired_capacity          = var.desired_capacity
+  min_size                  = var.min_size
+  max_size                  = var.max_size
+  vpc_zone_identifier       = module.networking.private_subnet_ids
+  target_group_arns         = [aws_lb_target_group.app.arn]
+  health_check_type         = "ELB"
+  health_check_grace_period = 300
+
+  launch_template {
+    id      = aws_launch_template.app.id
+    version = "$Latest"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${var.name}-app"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_autoscaling_policy" "http" {
+  name                   = "${var.name}-http-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.app.name
+  policy_type            = "TargetTrackingScaling"
+  estimated_instance_warmup = 300
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label         = aws_lb_target_group.app.arn_suffix
+    }
+
+    target_value = var.target_http_requests_per_target
   }
 }

@@ -25,7 +25,7 @@ variable "private_subnet_cidrs" {
 
 variable "admin_cidr_blocks" {
   description = "CIDR blocks allowed for SSH administration"
-  type        = string
+  type        = list(string)
 }
 
 variable "tags" {

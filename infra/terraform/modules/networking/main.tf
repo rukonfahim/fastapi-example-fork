@@ -141,12 +141,14 @@ resource "aws_network_acl_rule" "public_ingress_https" {
 }
 
 resource "aws_network_acl_rule" "public_ingress_ssh" {
+  count = length(var.admin_cidr_blocks)
+
   network_acl_id = aws_network_acl.public.id
-  rule_number    = 120
+  rule_number    = 120 + count.index
   egress         = false
   protocol       = "tcp"
   rule_action    = "allow"
-  cidr_block     = var.admin_cidr_blocks
+  cidr_block     = var.admin_cidr_blocks[count.index]
   from_port      = 22
   to_port        = 22
 }

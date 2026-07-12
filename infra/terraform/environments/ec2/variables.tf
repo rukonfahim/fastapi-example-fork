@@ -53,7 +53,7 @@ variable "admin_cidr_blocks" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for the EC2 instance"
+  description = "AMI ID for the EC2 instances"
   type        = string
   default     = "ami-0c02fb55956c7d316"
 }
@@ -64,6 +64,30 @@ variable "instance_type" {
   default     = "t3.small"
 }
 
+variable "desired_capacity" {
+  description = "Desired number of EC2 instances in the autoscaling group"
+  type        = number
+  default     = 2
+}
+
+variable "min_size" {
+  description = "Minimum number of EC2 instances in the autoscaling group"
+  type        = number
+  default     = 2
+}
+
+variable "max_size" {
+  description = "Maximum number of EC2 instances in the autoscaling group"
+  type        = number
+  default     = 6
+}
+
+variable "target_http_requests_per_target" {
+  description = "Target average HTTP requests per target for the autoscaling policy"
+  type        = number
+  default     = 25
+}
+
 variable "key_name" {
   description = "AWS SSH key pair name"
   type        = string
@@ -71,7 +95,7 @@ variable "key_name" {
 }
 
 variable "container_image" {
-  description = "Container image to run on the EC2 instance"
+  description = "Container image to run on the EC2 instances"
   type        = string
 }
 

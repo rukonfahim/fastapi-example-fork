@@ -1,25 +1,28 @@
 # Terraform AWS deployment
 
-This directory contains modular Terraform for two production-ready deployment approaches:
+This directory contains Terraform for a production-oriented AWS deployment of the FastAPI application on EC2.
 
-1. EC2 deployment with a public ALB and a single application instance
-2. EKS deployment with a managed Kubernetes cluster and worker nodes
+## Architecture
+
+The deployment uses:
+
+- a VPC with public and private subnets
+- an Application Load Balancer in the public subnets
+- EC2 instances in the private subnets
+- a launch template for the application container
+- an autoscaling group that scales based on HTTP traffic
+- CloudWatch logs and IAM roles for the instances
 
 ## Structure
 
 - modules/networking: VPC, subnets, NAT gateway, route tables, and NACLs
-- modules/security: ALB and app security groups, plus EKS security groups
-- modules/iam: IAM roles and instance profiles for EC2 and EKS
-- environments/ec2: Terraform for EC2 deployment
-- environments/eks: Terraform for EKS deployment
+- modules/security: ALB and app security groups
+- modules/iam: IAM roles and instance profiles for EC2
+- environments/ec2: Terraform for the EC2 autoscaling deployment
 
-## Usage
+## Deploy to EC2
 
-Choose exactly one deployment path. Provisioning the EC2 environment and the EKS environment together is not required and would create separate AWS resources.
-
-### Option 1: Deploy to EC2
-
-This provisions a VPC, public/private subnets, security groups, an ALB, and a single EC2 instance that can run the application container.
+This provisions a VPC, subnets, security groups, an ALB, and an autoscaling group of EC2 instances that run the application container.
 
 ```bash
 cd infra/terraform/environments/ec2
@@ -34,92 +37,56 @@ Create a local terraform.tfvars file if you have not already:
 region = "us-east-1"
 name   = "fastapi-prod"
 admin_cidr_blocks = ["203.0.113.0/24"]
+container_image = "ghcr.io/OWNER/REPO:latest"
+
+desired_capacity = 2
+min_size         = 2
+max_size         = 6
+target_http_requests_per_target = 25
 ```
 
-To destroy the EC2 deployment:
+To destroy the deployment:
 
 ```bash
 terraform destroy -var-file=terraform.tfvars
 ```
 
-### Option 2: Deploy to EKS
-
-This provisions a VPC, subnets, IAM roles, security groups, an EKS cluster, and a managed node group.
-
-```bash
-cd infra/terraform/environments/eks
-terraform init
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
-```
-
-Example terraform.tfvars:
-
-```hcl
-region = "us-east-1"
-name   = "fastapi-prod"
-admin_cidr_blocks = ["203.0.113.0/24"]
-```
-
-To destroy the EKS deployment:
-
-```bash
-terraform destroy -var-file=terraform.tfvars
-```
-
-## Architecture diagrams
-
-### EC2 deployment
+## Architecture diagram
 
 ```mermaid
 flowchart LR
     Internet[Internet / Clients] --> ALB[Application Load Balancer]
-    ALB --> EC2[EC2 instance running FastAPI container]
-    EC2 --> RDS[(Optional managed database)]
+    ALB --> ASG[EC2 autoscaling group]
+    ASG --> App[FastAPI container on EC2]
+    App --> RDS[(Optional managed database)]
 ```
 
-### EKS deployment
+## Auto scaling behavior
 
-```mermaid
-flowchart LR
-    Internet[Internet / Clients] --> ALB[Application Load Balancer]
-    ALB --> Service[Service / Ingress]
-    Service --> Pods[FastAPI pods in EKS]
-    Pods --> RDS[(Optional managed database)]
-    EKS[EKS control plane] --> Pods
-```
+The autoscaling group uses a target-tracking policy based on ALB request count per target. The default target is 25 requests per target per minute, which is a sensible starting point for a small FastAPI workload.
 
-## Custom environment variables and monitoring
+Recommended defaults:
 
-### EC2
+- desired capacity: 2
+- minimum capacity: 2
+- maximum capacity: 6
+- target value: 25 requests per target per minute
 
-The EC2 environment uses a rendered user-data script that writes a container env file and starts the application with Docker. You can pass custom values such as database URLs or feature flags through the `app_env` variable.
+## Environment variables and monitoring
+
+The EC2 environment uses a rendered user-data script that writes a container env file and starts the application with Docker. You can pass custom values such as database URLs or feature flags through the app_env variable.
 
 Example:
 
 ```hcl
 app_env = {
-  APP_ENVIRONMENT = "production"
-  APP_LOG_LEVEL   = "INFO"
+  APP_ENVIRONMENT  = "production"
+  APP_LOG_LEVEL    = "INFO"
   APP_CORS_ORIGINS = "https://example.com"
 }
 ```
 
-For monitoring, the EC2 path provisions a CloudWatch log group and can be extended with CloudWatch Agent, SSM, or a monitoring stack such as Prometheus/Grafana.
-
-### EKS
-
-The EKS environment can consume the same app environment variables in a Kubernetes Deployment manifest. The example template includes Prometheus scrape annotations so you can plug in a monitoring solution such as Prometheus Operator or CloudWatch Container Insights.
-
-Example:
-
-```hcl
-app_env = {
-  APP_ENVIRONMENT = "production"
-  APP_LOG_LEVEL   = "INFO"
-  APP_CORS_ORIGINS = "https://example.com"
-}
-```
+For monitoring, the deployment provisions a CloudWatch log group and can be extended with CloudWatch Agent, SSM, or alarms for CPU, memory, and ALB request count.
 
 ## Verify without deploying to AWS
 
@@ -127,18 +94,16 @@ You can validate most of the setup locally before touching AWS.
 
 ### 1. Terraform syntax and formatting
 
-Run this from either environment directory:
+Run this from the EC2 environment directory:
 
 ```bash
 terraform fmt -check -recursive
 terraform validate
 ```
 
-Expected result: Terraform reports no syntax or configuration errors.
-
 ### 2. Rendered configuration checks
 
-For the EC2 path, confirm the user-data template renders with your variables:
+Confirm the user-data template renders with your variables:
 
 ```bash
 terraform console <<'EOF'
@@ -151,26 +116,14 @@ jsonencode(templatefile("./user_data.tpl", {
 EOF
 ```
 
-For the EKS path, confirm the deployment manifest template renders:
-
-```bash
-terraform console <<'EOF'
-templatefile("./app-deployment.yaml.tpl", {
-  app_name  = "fastapi"
-  app_image = "ghcr.io/OWNER/REPO:latest"
-  app_env   = { APP_ENVIRONMENT = "production" }
-})
-EOF
-```
-
 ### 3. Local Docker image validation
 
 Build the application image locally to verify the container can start:
 
 ```bash
 cd ../..
- docker build -f Dockerfile -t fastapi-example:test .
- docker run --rm -p 8000:8000 fastapi-example:test
+docker build -f Dockerfile -t fastapi-example:test .
+docker run --rm -p 8000:8000 fastapi-example:test
 ```
 
 Then test the endpoint:
@@ -179,28 +132,12 @@ Then test the endpoint:
 curl http://127.0.0.1:8000/healthz
 ```
 
-### 4. Static review for AWS-specific pieces
+## Best practices for AWS EC2 deployment
 
-Check that the Terraform files include the following items:
-
-- VPC and subnets
-- Security groups / NACLs
-- IAM roles and policies
-- ALB or EKS cluster resources
-- Container image reference in the deployment path
-- Environment variables passed into the app container
-- Logging/monitoring hook points
-
-### 5. Optional pre-flight checks for secrets and monitoring
-
-If you plan to use secrets or monitoring later, verify these placeholders are added before deployment:
-
-- Secrets Manager or SSM Parameter Store references
-- CloudWatch Agent or Prometheus configuration
-- Alerting rules or dashboards
-
-## Notes
-
-- Replace the sample CIDR blocks and AMI values with your own environment-specific values.
-- For production, add an ALB certificate, Route53 DNS, ECR repository, and remote state backend.
-- Consider using a managed PostgreSQL or other data service as needed for your application.
+- Keep application instances in private subnets and expose them only through the ALB.
+- Use a launch template so the instance configuration is versioned and repeatable.
+- Use ALB health checks and let the autoscaling group replace unhealthy instances.
+- Store secrets in SSM Parameter Store or Secrets Manager instead of embedding them in user data.
+- Use CloudWatch alarms for CPU, memory, and request volume.
+- Add an HTTPS listener with an ACM certificate for production traffic.
+- Consider using ECR for container images and a managed database service for persistence.
