@@ -1,0 +1,1 @@
+docker run -p 8080:8443 ghcr.io/rukonfahim/fastapi-example-fork:latest
